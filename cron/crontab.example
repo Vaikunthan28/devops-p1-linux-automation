@@ -1,0 +1,23 @@
+# =============================================================================
+# cron/crontab.example — Cron Job Schedule
+#
+# HOW TO INSTALL:
+#   Option 1 (manual):  crontab -e  → paste lines below
+#   Option 2 (auto):    Run bootstrap/user-data.sh — installs automatically
+#
+# VERIFY: crontab -l
+# =============================================================================
+
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+
+PROJECT_ROOT=/home/ubuntu/devops-p1-linux-automation
+
+# Monitor every 5 minutes — writes metrics to S3 for dashboard
+*/5 * * * * $PROJECT_ROOT/scripts/monitor.sh >> $PROJECT_ROOT/logs/cron.log 2>&1
+
+# Rotate logs daily at midnight
+0 0 * * * $PROJECT_ROOT/scripts/log-rotate.sh >> $PROJECT_ROOT/logs/cron.log 2>&1
+
+# Archive old compressed logs to S3 every Sunday at 2am
+0 2 * * 0 $PROJECT_ROOT/scripts/archive-s3.sh >> $PROJECT_ROOT/logs/cron.log 2>&1

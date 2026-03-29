@@ -1,0 +1,29 @@
+# Secrets — never commit these
+config/.env
+
+# Runtime logs
+logs/
+*.log
+*.log.gz
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# macOS
+.DS_Store
+
+# Editor
+.vscode/
+.idea/
+*.swp
+
+# SSH keys
+*.pem
+*.key
+
+# Node info (generated at runtime)
+node-info.txt

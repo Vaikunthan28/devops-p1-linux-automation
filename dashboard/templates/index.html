@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DevOps P1 — Infrastructure Monitor</title>
+  <style>
+    /* -------------------------------------------------------------------------
+       Design System
+    ------------------------------------------------------------------------- */
+    :root {
+      --bg:           #0d1117;
+      --surface:      #161b22;
+      --surface-2:    #1c2128;
+      --border:       #30363d;
+      --text:         #e6edf3;
+      --text-muted:   #7d8590;
+      --green:        #3fb950;
+      --green-dim:    #1a3a1f;
+      --yellow:       #d29922;
+      --yellow-dim:   #3a2a00;
+      --red:          #f85149;
+      --red-dim:      #3a1a1a;
+      --blue:         #58a6ff;
+      --blue-dim:     #1a2a3a;
+      --purple:       #bc8cff;
+      --radius:       8px;
+      --radius-sm:    4px;
+      --font:         'SF Mono', 'Fira Code', 'Consolas', monospace;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 14px;
+      min-height: 100vh;
+    }
+
+    /* -------------------------------------------------------------------------
+       Top Bar
+    ------------------------------------------------------------------------- */
+    .topbar {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 24px;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .topbar-brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 600;
+      font-size: 15px;
+    }
+
+    .topbar-brand .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 6px var(--green);
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.4; }
+    }
+
+    .topbar-right {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      color: var(--text-muted);
+      font-size: 12px;
+    }
+
+    #refresh-badge {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 4px 10px;
+      font-family: var(--font);
+      font-size: 11px;
+    }
+
+    /* -------------------------------------------------------------------------
+       Main Layout
+    ------------------------------------------------------------------------- */
+    .main { padding: 24px; max-width: 1400px; margin: 0 auto; }
+
+    /* -------------------------------------------------------------------------
+       Summary Bar
+    ------------------------------------------------------------------------- */
+    .summary-bar {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+
+    .summary-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+      text-align: center;
+    }
+
+    .summary-card .value {
+      font-size: 28px;
+      font-weight: 700;
+      font-family: var(--font);
+      line-height: 1;
+      margin-bottom: 4px;
+    }
+
+    .summary-card .label {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .summary-card.healthy  .value { color: var(--green);  }
+    .summary-card.warning  .value { color: var(--yellow); }
+    .summary-card.critical .value { color: var(--red);    }
+    .summary-card.stale    .value { color: var(--text-muted); }
+    .summary-card.total    .value { color: var(--blue);   }
+    .summary-card.avg      .value { color: var(--purple); }
+
+    /* -------------------------------------------------------------------------
+       Section Header
+    ------------------------------------------------------------------------- */
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+
+    .section-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    /* -------------------------------------------------------------------------
+       Node Grid
+    ------------------------------------------------------------------------- */
+    .node-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+      gap: 16px;
+    }
+
+    .node-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      transition: border-color 0.2s;
+    }
+
+    .node-card:hover { border-color: var(--blue); }
+
+    .node-card.status-healthy  { border-left: 3px solid var(--green);  }
+    .node-card.status-warning  { border-left: 3px solid var(--yellow); }
+    .node-card.status-critical { border-left: 3px solid var(--red);    }
+    .node-card.status-stale    { border-left: 3px solid var(--text-muted); }
+
+    /* Node Header */
+    .node-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .node-hostname {
+      font-family: var(--font);
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .node-timestamp {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .status-badge {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      padding: 3px 8px;
+      border-radius: 20px;
+    }
+
+    .badge-healthy  { background: var(--green-dim);  color: var(--green);  }
+    .badge-warning  { background: var(--yellow-dim); color: var(--yellow); }
+    .badge-critical { background: var(--red-dim);    color: var(--red);    }
+    .badge-stale    { background: var(--surface-2);  color: var(--text-muted); }
+
+    /* Node Body */
+    .node-body { padding: 16px; }
+
+    /* Metric Row */
+    .metric-row {
+      margin-bottom: 14px;
+    }
+
+    .metric-row:last-child { margin-bottom: 0; }
+
+    .metric-label-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+
+    .metric-label {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    .metric-value {
+      font-family: var(--font);
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    /* Progress Bar */
+    .progress-track {
+      height: 6px;
+      background: var(--surface-2);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      border-radius: 3px;
+      transition: width 0.6s ease;
+    }
+
+    .fill-green  { background: var(--green);  }
+    .fill-yellow { background: var(--yellow); }
+    .fill-red    { background: var(--red);    }
+
+    /* Disk Entries */
+    .disk-entries { display: flex; flex-direction: column; gap: 8px; }
+
+    /* Alerts */
+    .node-alerts {
+      margin-top: 12px;
+      padding: 10px 12px;
+      background: var(--red-dim);
+      border: 1px solid rgba(248, 81, 73, 0.3);
+      border-radius: var(--radius-sm);
+    }
+
+    .node-alerts .alert-title {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--red);
+      margin-bottom: 4px;
+    }
+
+    .node-alerts .alert-msg {
+      font-size: 11px;
+      color: #f0a0a0;
+      line-height: 1.6;
+    }
+
+    /* -------------------------------------------------------------------------
+       Empty / Loading / Error States
+    ------------------------------------------------------------------------- */
+    .empty-state {
+      grid-column: 1 / -1;
+      text-align: center;
+      padding: 64px 24px;
+      color: var(--text-muted);
+    }
+
+    .empty-state .icon { font-size: 48px; margin-bottom: 16px; }
+    .empty-state .title { font-size: 18px; font-weight: 600; color: var(--text); margin-bottom: 8px; }
+    .empty-state .desc  { font-size: 13px; line-height: 1.6; }
+    .empty-state code {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 2px 6px;
+      font-family: var(--font);
+      font-size: 12px;
+    }
+
+    /* -------------------------------------------------------------------------
+       Footer
+    ------------------------------------------------------------------------- */
+    .footer {
+      margin-top: 32px;
+      padding: 16px 0;
+      border-top: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      color: var(--text-muted);
+      font-size: 11px;
+    }
+
+    /* -------------------------------------------------------------------------
+       Spinner
+    ------------------------------------------------------------------------- */
+    .spinner {
+      display: inline-block;
+      width: 12px; height: 12px;
+      border: 2px solid var(--border);
+      border-top-color: var(--blue);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      vertical-align: middle;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+<!-- =========================================================================
+     Top Bar
+========================================================================= -->
+<div class="topbar">
+  <div class="topbar-brand">
+    <div class="dot"></div>
+    DevOps P1 — Infrastructure Monitor
+  </div>
+  <div class="topbar-right">
+    <span id="fetched-at">Loading...</span>
+    <span id="refresh-badge">⟳ Refreshing in <span id="countdown">{{ refresh_interval }}</span>s</span>
+  </div>
+</div>
+
+<!-- =========================================================================
+     Main
+========================================================================= -->
+<div class="main">
+
+  <!-- Summary Bar -->
+  <div class="summary-bar" id="summary-bar">
+    <div class="summary-card total">
+      <div class="value" id="sum-total">—</div>
+      <div class="label">Total Nodes</div>
+    </div>
+    <div class="summary-card healthy">
+      <div class="value" id="sum-healthy">—</div>
+      <div class="label">Healthy</div>
+    </div>
+    <div class="summary-card warning">
+      <div class="value" id="sum-warning">—</div>
+      <div class="label">Warning</div>
+    </div>
+    <div class="summary-card critical">
+      <div class="value" id="sum-critical">—</div>
+      <div class="label">Critical</div>
+    </div>
+    <div class="summary-card stale">
+      <div class="value" id="sum-stale">—</div>
+      <div class="label">Stale</div>
+    </div>
+    <div class="summary-card avg">
+      <div class="value" id="sum-cpu">—</div>
+      <div class="label">Avg CPU %</div>
+    </div>
+    <div class="summary-card avg">
+      <div class="value" id="sum-mem">—</div>
+      <div class="label">Avg Mem %</div>
+    </div>
+  </div>
+
+  <!-- Node Grid -->
+  <div class="section-header">
+    <div class="section-title">Nodes</div>
+    <div id="loading-indicator" style="display:none">
+      <span class="spinner"></span> Fetching...
+    </div>
+  </div>
+
+  <div class="node-grid" id="node-grid">
+    <div class="empty-state">
+      <div class="icon">⏳</div>
+      <div class="title">Loading nodes...</div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div class="footer">
+    <span>DevOps Portfolio — P1 Linux Automation</span>
+    <span>Metrics source: S3 | Auto-refresh: every {{ refresh_interval }}s</span>
+  </div>
+
+</div>
+
+<!-- =========================================================================
+     JavaScript — Fetches /api/nodes and renders the dashboard
+========================================================================= -->
+<script>
+  const REFRESH_INTERVAL = {{ refresh_interval }};
+  let countdown = REFRESH_INTERVAL;
+  let refreshTimer, countdownTimer;
+
+  // -------------------------------------------------------------------------
+  // getBarClass() — returns CSS class based on usage percentage
+  // -------------------------------------------------------------------------
+  function getBarClass(percent, warn = 60, crit = 80) {
+    if (percent >= crit)  return 'fill-red';
+    if (percent >= warn)  return 'fill-yellow';
+    return 'fill-green';
+  }
+
+  // -------------------------------------------------------------------------
+  // renderProgressBar() — builds a metric row with label + progress bar
+  // -------------------------------------------------------------------------
+  function renderProgressBar(label, percent, subLabel = '') {
+    const barClass = getBarClass(percent);
+    const pct = Math.min(percent, 100);
+    return `
+      <div class="metric-row">
+        <div class="metric-label-row">
+          <span class="metric-label">${label}</span>
+          <span class="metric-value" style="color:var(--text)">${pct}%${subLabel ? ' <span style="color:var(--text-muted);font-weight:400">' + subLabel + '</span>' : ''}</span>
+        </div>
+        <div class="progress-track">
+          <div class="progress-fill ${barClass}" style="width:${pct}%"></div>
+        </div>
+      </div>`;
+  }
+
+  // -------------------------------------------------------------------------
+  // renderDisk() — renders all disk partitions
+  // -------------------------------------------------------------------------
+  function renderDisk(disks) {
+    if (!disks || disks.length === 0) return '';
+    const entries = disks.map(d =>
+      renderProgressBar(`Disk (${d.mount})`, d.percent)
+    ).join('');
+    return `<div class="disk-entries">${entries}</div>`;
+  }
+
+  // -------------------------------------------------------------------------
+  // renderAlerts() — renders alert messages if any
+  // -------------------------------------------------------------------------
+  function renderAlerts(alerts) {
+    if (!alerts || alerts.length === 0) return '';
+    const msgs = alerts.map(a => `<div class="alert-msg">• ${a}</div>`).join('');
+    return `
+      <div class="node-alerts">
+        <div class="alert-title">⚠ Active Alerts</div>
+        ${msgs}
+      </div>`;
+  }
+
+  // -------------------------------------------------------------------------
+  // renderNode() — builds a full node card
+  // -------------------------------------------------------------------------
+  function renderNode(node) {
+    const status    = node.status || 'healthy';
+    const hostname  = node.hostname || 'unknown';
+    const lastSeen  = node.last_seen_label || '?';
+    const cpu       = node.cpu?.percent ?? 0;
+    const memPct    = node.memory?.percent ?? 0;
+    const memUsed   = node.memory?.used_mb ?? 0;
+    const memTotal  = node.memory?.total_mb ?? 0;
+    const disks     = node.disk || [];
+    const alerts    = node.alerts || [];
+
+    const badgeClass = `badge-${status}`;
+    const statusLabel = status.charAt(0).toUpperCase() + status.slice(1);
+    const memSubLabel = memTotal ? `${memUsed}MB / ${memTotal}MB` : '';
+
+    return `
+      <div class="node-card status-${status}">
+        <div class="node-header">
+          <div>
+            <div class="node-hostname">${hostname}</div>
+            <div class="node-timestamp">Last seen: ${lastSeen}</div>
+          </div>
+          <span class="status-badge ${badgeClass}">${statusLabel}</span>
+        </div>
+        <div class="node-body">
+          ${renderProgressBar('CPU', cpu)}
+          ${renderProgressBar('Memory', memPct, memSubLabel)}
+          ${renderDisk(disks)}
+          ${renderAlerts(alerts)}
+        </div>
+      </div>`;
+  }
+
+  // -------------------------------------------------------------------------
+  // renderEmptyState() — shown when no nodes are reporting
+  // -------------------------------------------------------------------------
+  function renderEmptyState(bucket) {
+    return `
+      <div class="empty-state">
+        <div class="icon">📡</div>
+        <div class="title">No nodes reporting yet</div>
+        <div class="desc">
+          Waiting for nodes to send metrics to S3.<br><br>
+          On each monitored server, run:<br><br>
+          <code>./scripts/monitor.sh</code><br><br>
+          Metrics will appear here within 30 seconds.<br>
+          Bucket: <code>${bucket || 'not configured'}</code>
+        </div>
+      </div>`;
+  }
+
+  // -------------------------------------------------------------------------
+  // updateSummary() — updates the summary bar cards
+  // -------------------------------------------------------------------------
+  function updateSummary(summary) {
+    document.getElementById('sum-total').textContent   = summary.total    ?? '—';
+    document.getElementById('sum-healthy').textContent = summary.healthy  ?? '—';
+    document.getElementById('sum-warning').textContent = summary.warning  ?? '—';
+    document.getElementById('sum-critical').textContent= summary.critical ?? '—';
+    document.getElementById('sum-stale').textContent   = summary.stale    ?? '—';
+    document.getElementById('sum-cpu').textContent     = summary.avg_cpu != null ? summary.avg_cpu + '%' : '—';
+    document.getElementById('sum-mem').textContent     = summary.avg_mem != null ? summary.avg_mem + '%' : '—';
+  }
+
+  // -------------------------------------------------------------------------
+  // fetchNodes() — main data fetch, called on load and every REFRESH_INTERVAL
+  // -------------------------------------------------------------------------
+  async function fetchNodes() {
+    document.getElementById('loading-indicator').style.display = 'inline';
+
+    try {
+      const response = await fetch('/api/nodes');
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const data = await response.json();
+
+      // Update summary bar
+      updateSummary(data.summary || {});
+
+      // Update fetched-at label
+      document.getElementById('fetched-at').textContent = data.fetched_at || '';
+
+      // Render node grid
+      const grid = document.getElementById('node-grid');
+      if (!data.nodes || data.nodes.length === 0) {
+        grid.innerHTML = renderEmptyState(data.bucket);
+      } else {
+        grid.innerHTML = data.nodes.map(renderNode).join('');
+      }
+
+    } catch (err) {
+      console.error('Failed to fetch node data:', err);
+      document.getElementById('node-grid').innerHTML = `
+        <div class="empty-state">
+          <div class="icon">❌</div>
+          <div class="title">Failed to load data</div>
+          <div class="desc">${err.message}<br>Check the Flask server logs.</div>
+        </div>`;
+    } finally {
+      document.getElementById('loading-indicator').style.display = 'none';
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Countdown timer — resets every REFRESH_INTERVAL seconds
+  // -------------------------------------------------------------------------
+  function startCountdown() {
+    countdown = REFRESH_INTERVAL;
+    clearInterval(countdownTimer);
+    countdownTimer = setInterval(() => {
+      countdown = Math.max(0, countdown - 1);
+      document.getElementById('countdown').textContent = countdown;
+    }, 1000);
+  }
+
+  // -------------------------------------------------------------------------
+  // Auto-refresh loop
+  // -------------------------------------------------------------------------
+  function startRefresh() {
+    fetchNodes();
+    startCountdown();
+
+    clearInterval(refreshTimer);
+    refreshTimer = setInterval(() => {
+      fetchNodes();
+      startCountdown();
+    }, REFRESH_INTERVAL * 1000);
+  }
+
+  // Kick off on page load
+  startRefresh();
+</script>
+</body>
+</html>
