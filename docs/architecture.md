@@ -109,16 +109,3 @@ Each node:
 | SSH hardening script | CIS-aligned, idempotent, validates before restart |
 | S3 STANDARD_IA for archives | Cost-optimised for infrequent-access data |
 | Node stale detection (10 min) | Dashboard flags nodes that stop reporting |
-
-## Evolution Path (P6 — Ansible)
-
-> In P6, `user-data.sh` is replaced with Ansible playbooks.
-> The scripts themselves don't change — only the delivery mechanism does.
-
-```
-P1 (now):  user-data.sh → bootstrap on launch
-P6 (later): ansible-playbook site.yml -i inventory → manage 100+ nodes
-```
-
-This is a common real-world pattern: start with User Data for simplicity,
-migrate to Ansible as the fleet grows and configuration management needs increase.
