@@ -218,3 +218,6 @@ All configuration in `config/.env`:
 - **S3 STANDARD_IA** — cost-optimised archival storage
 
 ---
+## Output
+
+<img width="1903" height="603" alt="image" src="https://github.com/user-attachments/assets/c81ef29f-5eb4-48ed-b6f8-03eb4c7efd58" />
